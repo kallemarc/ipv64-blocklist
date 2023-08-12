@@ -1,0 +1,16 @@
+# Set your API key/token and Blocker ID here
+API_KEY=""
+BLOCKER_ID=""
+
+# SSH log file path
+#Debian & Ubuntu
+SSH_LOG_FILE="/var/log/auth.log"
+
+#-> CentOS 9
+#SSH_LOG_FILE="/var/log/secure"
+
+# Set your SSH port here
+SSH_PORT="22"
+
+# File to store reported IPs and their expiration times
+REPORTED_IPS_FILE="/var/log/reported_ips.txt"
