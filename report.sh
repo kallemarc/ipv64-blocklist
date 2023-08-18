@@ -38,22 +38,42 @@ if [ "$changes_made" = true ]; then
     echo "rsyslog service restarted."
 
     # Back up the auth.log
-    sudo cp $SSH_LOG_FILE /var/log/auth.log.backup
+    sudo cp "$SSH_LOG_FILE" /var/log/auth.log.backup
 
     # Clear the auth.log
     sudo sh -c "> $SSH_LOG_FILE"
-    echo ""$SSH_LOG_FILE" backed up and cleared."
+    echo "$SSH_LOG_FILE backed up and cleared."
 fi
 
-# Function to report a list of poisoned IPs
-report_ip_list() {
-    local JSON_DATA="$1"
-
-    curl -X POST -H "Authorization: Bearer $API_KEY" \
-         -d "blocker_id=$BLOCKER_ID" \
-         -d "report_ip_list=$JSON_DATA" \
-         "https://ipv64.net/api"
+# Function to wait until the API limit resets
+wait_for_api_limit_reset() {
+    local LIMIT_RESET_INTERVAL=10  # API limit resets every 10 seconds
+    sleep "$LIMIT_RESET_INTERVAL"
 }
+
+# Function to report IPs with retry on API limit failure
+report_ip_list_with_retry() {
+    local JSON_DATA="$1"
+    local MAX_RETRY_ATTEMPTS=3
+    local RETRY_COUNT=0
+
+    while [ "$RETRY_COUNT" -lt "$MAX_RETRY_ATTEMPTS" ]; do
+        RESPONSE=$(curl -X POST -H "Authorization: Bearer $API_KEY" \
+             -d "blocker_id=$BLOCKER_ID" \
+             -d "report_ip_list=$JSON_DATA" \
+             "https://ipv64.net/api")
+
+        if [ "$?" -eq 0 ] && echo "$RESPONSE" | grep -q '"info":"success"'; then
+            echo "IPs reported successfully."
+            break
+        else
+            echo "Reporting IPs failed. Retrying in 10 seconds..."
+            wait_for_api_limit_reset
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+        fi
+    done
+}
+
 
 # Remove expired IPs from REPORTED_IPS_FILE
 CURRENT_TIMESTAMP=$(date +%s)
@@ -112,7 +132,7 @@ extract_ips_from_ssh_log() {
         JSON_DATA+=']}'
 
         # Report all suspicious IPs in a single API request
-        report_ip_list "$JSON_DATA"
+        report_ip_list_with_retry "$JSON_DATA"
     fi
 }
 
